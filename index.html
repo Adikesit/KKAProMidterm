@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simulator Rubik 2x2x2</title>
+<style>
+:root{--bg:#f4f4f2;--fg:#1d1d1b;--mut:#6b6b66;--btn:#1d1d1b;--btnfg:#fff;--ok:#1a7f37;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#171716;--fg:#ecece8;--mut:#9a9a94;--btn:#ecece8;--btnfg:#171716;--ok:#4ac26b}}
+:root[data-theme="dark"]{--bg:#171716;--fg:#ecece8;--mut:#9a9a94;--btn:#ecece8;--btnfg:#171716;--ok:#4ac26b}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+#app{height:100%;display:flex;flex-direction:column}
+header{padding:14px 16px 0;text-align:center}
+h1{font-size:18px;margin:0}
+p{margin:4px 0 0;font-size:13px;color:var(--mut)}
+#stage{flex:1;min-height:0;touch-action:none}
+canvas{display:block;touch-action:none}
+footer{display:flex;gap:10px;justify-content:center;align-items:center;padding:12px 16px 16px;flex-wrap:wrap}
+button{background:var(--btn);color:var(--btnfg);border:0;border-radius:8px;padding:10px 18px;font-size:14px;cursor:pointer}
+#info{font-size:14px;min-width:120px;text-align:center}
+#info.ok{color:var(--ok);font-weight:600}
+#panel{padding:0 16px 14px;font-size:13px;max-height:34vh;overflow:auto}
+.row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;margin-bottom:8px}
+select,#nScr{padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;background:var(--bg);color:var(--fg)}
+#nScr{width:56px}
+#met{text-align:center}
+#out{margin:6px 0 0;white-space:pre-wrap;font-size:12px}
+button:disabled{opacity:.5}
+#tbl{overflow-x:auto;margin-top:6px}
+table{border-collapse:collapse;margin:0 auto;font-size:12px}
+td,th{padding:4px 8px;border-bottom:1px solid #8884;text-align:left;vertical-align:top}
+td.f{font-family:monospace;max-width:320px;word-break:break-word}
+td button{padding:3px 8px;font-size:12px;margin-left:6px}
+</style>
+</head>
+<body>
+<div id="app">
+<header><h1>Simulator Rubik 2x2x2</h1><p>Drag di kubus buat putar layer, drag di luar kubus buat muter tampilan.</p></header>
+<div id="stage"></div>
+<footer>
+  <button id="bScr">Acak</button>
+  <button id="bRes">Reset</button>
+  <span id="info">Langkah: 0</span>
+  <input type="text" id="iFormula" placeholder="Masukkan rumus (misal: R U R' U')" style="padding:8px 12px; border-radius:8px; border:1px solid #ccc; width:220px; font-size:14px;">
+  <button id="bExec">Jalankan Rumus</button>
+</footer>
+<section id="panel">
+  <div class="row">
+    <label>Panjang acakan <input type="number" id="nScr" value="6" min="1" max="30"></label>
+    <button id="bSolve">Cari Solusi (4 Algoritma)</button><button id="bExp">Jalankan Eksperimen</button>
+  </div>
+  <div id="met">Metrik: -</div>
+  <div id="tbl"></div>
+  <pre id="out"></pre>
+</section>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const stage=document.getElementById('stage'),info=document.getElementById('info');
+const scene=new THREE.Scene();
+const cam=new THREE.PerspectiveCamera(40,1,0.1,100);cam.position.set(0,0,7.5);
+const rend=new THREE.WebGLRenderer({antialias:true,alpha:true});
+rend.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+stage.appendChild(rend.domElement);
+const root=new THREE.Group();scene.add(root);
+root.quaternion.setFromEuler(new THREE.Euler(0.55,-0.7,0));
+const COL={px:0xd62828,nx:0xf77f00,py:0xf5f5f5,ny:0xffd60a,pz:0x2a9d4f,nz:0x1d5fd1};
+const FACES=[['px',[1,0,0],[0,Math.PI/2,0]],['nx',[-1,0,0],[0,-Math.PI/2,0]],['py',[0,1,0],[-Math.PI/2,0,0]],['ny',[0,-1,0],[Math.PI/2,0,0]],['pz',[0,0,1],[0,0,0]],['nz',[0,0,-1],[0,Math.PI,0]]];
+let cubies=[],bodies=[],moves=0,busy=false,queue=[],anim=null,scrambling=false;
+const bodyGeo=new THREE.BoxGeometry(0.99,0.99,0.99),bodyMat=new THREE.MeshBasicMaterial({color:0x111111}),stGeo=new THREE.PlaneGeometry(0.82,0.82);
+
+function build(){
+  cubies.forEach(c=>root.remove(c));cubies=[];bodies=[];
+  for(const x of[-.5,.5])for(const y of[-.5,.5])for(const z of[-.5,.5]){
+    const g=new THREE.Group();g.position.set(x,y,z);
+    const b=new THREE.Mesh(bodyGeo,bodyMat);g.add(b);bodies.push(b);
+    g.userData.st=[];
+    for(const[k,n,r]of FACES){
+      if(Math.sign(n[0]*x+n[1]*y+n[2]*z)<=0)continue;
+      const m=new THREE.Mesh(stGeo,new THREE.MeshBasicMaterial({color:COL[k]}));
+      m.position.set(n[0]*.5,n[1]*.5,n[2]*.5).multiplyScalar(1.002);m.rotation.set(r[0],r[1],r[2]);
+      m.userData={n:new THREE.Vector3(...n),c:COL[k]};g.add(m);g.userData.st.push(m);
+    }
+    root.add(g);cubies.push(g);
+  }
+  moves=0;queue=[];anim=null;busy=false;upd();
+}
+
+function upd(msg){info.textContent=msg||('Langkah: '+moves);info.className=msg?'ok':''}
+function solved(){
+  const map={};
+  for(const c of cubies)for(const s of c.userData.st){
+    const n=s.userData.n.clone().applyQuaternion(c.quaternion);
+    const k=Math.round(n.x)+','+Math.round(n.y)+','+Math.round(n.z);
+    if(map[k]===undefined)map[k]=s.userData.c;else if(map[k]!==s.userData.c)return false;
+  }
+  return true;
+}
+
+function turn(axis,layer,dir,ms){queue.push({axis,layer,dir,ms:ms||260});next()}
+function next(){
+  if(anim||!queue.length)return;
+  const q=queue.shift(),pivot=new THREE.Group();root.add(pivot);
+  const sel=cubies.filter(c=>(c.position.dot(q.axis)>=0?1:-1)===q.layer);
+  sel.forEach(c=>pivot.attach(c));
+  anim={q,pivot,sel,t0:performance.now()};
+}
+
+function step(now){
+  if(anim){
+    const{q,pivot,sel,t0}=anim;let t=Math.min((now-t0)/q.ms,1);
+    const e=t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+    pivot.setRotationFromAxisAngle(q.axis,q.dir*Math.PI/2*e);
+    if(t>=1){
+      sel.forEach(c=>{root.attach(c);c.position.set(Math.round(c.position.x*2)/2,Math.round(c.position.y*2)/2,Math.round(c.position.z*2)/2)});
+      root.remove(pivot);anim=null;
+      if(!scrambling){moves++;upd(solved()&&moves>0?'Selesai! '+moves+' langkah':null)}
+      if(!queue.length&&scrambling){scrambling=false;moves=0;upd()}
+      next();
+    }
+  }
+  rend.render(scene,cam);requestAnimationFrame(step);
+}
+
+function scramble(){
+  if(anim||queue.length)return;
+  scrambling=true;const A=[new THREE.Vector3(1,0,0),new THREE.Vector3(0,1,0),new THREE.Vector3(0,0,1)];
+  const n=Math.max(1,Math.min(30,+document.getElementById('nScr').value||14));for(let i=0;i<n;i++)turn(A[Math.floor(Math.random()*3)],Math.random()<.5?1:-1,Math.random()<.5?1:-1,110);
+}
+
+document.getElementById('bScr').onclick=scramble;
+document.getElementById('bRes').onclick=()=>{scrambling=false;build()};
+
+// --- LOGIKA NOTASI RUBIK (R, L, U, D, F, dll) ---
+const AXIS_X = new THREE.Vector3(1, 0, 0);
+const AXIS_Y = new THREE.Vector3(0, 1, 0);
+const AXIS_Z = new THREE.Vector3(0, 0, 1);
+
+function moveR(prime = false) { turn(AXIS_X, 1, prime ? 1 : -1); }
+function moveL(prime = false) { turn(AXIS_X, -1, prime ? -1 : 1); }
+function moveU(prime = false) { turn(AXIS_Y, 1, prime ? 1 : -1); }
+function moveD(prime = false) { turn(AXIS_Y, -1, prime ? -1 : 1); }
+function moveF(prime = false) { turn(AXIS_Z, 1, prime ? 1 : -1); }
+
+function applyFormula(formulaStr) {
+  const tokens = formulaStr.trim().split(/\s+/);
+  for (const token of tokens) {
+    if (!token) continue;
+    const base = token[0].toUpperCase();
+    const isPrime = token.includes("'");
+    const isDouble = token.includes("2");
+    
+    const count = isDouble ? 2 : 1;
+    for (let i = 0; i < count; i++) {
+      switch (base) {
+        case 'R': moveR(isPrime); break;
+        case 'L': moveL(isPrime); break;
+        case 'U': moveU(isPrime); break;
+        case 'D': moveD(isPrime); break;
+        case 'F': moveF(isPrime); break;
+      }
+    }
+  }
+}
+
+document.getElementById('bExec').onclick = () => {
+  const formula = document.getElementById('iFormula').value;
+  applyFormula(formula);
+};
+
+// ===== SOLVER (state ringan 24 stiker, tanpa animasi) =====
+const FN=['px','nx','py','ny','pz','nz'],CID={};
+Object.keys(COL).forEach((k,i)=>CID[COL[k]]=i);
+const kf=(x,y,z,a,b,c)=>Math.round(x*2)/2+','+Math.round(y*2)/2+','+Math.round(z*2)/2+'|'+Math.round(a)+','+Math.round(b)+','+Math.round(c);
+const SLOTS=[],SIDX={};
+for(const x of[-.5,.5])for(const y of[-.5,.5])for(const z of[-.5,.5])for(const[k,n]of FACES){
+  if(n[0]*x+n[1]*y+n[2]*z>0){SIDX[kf(x,y,z,n[0],n[1],n[2])]=SLOTS.length;SLOTS.push({p:[x,y,z],n,k})}
+}
+// permutasi tiap gerakan diturunkan dari geometri yang sama dengan simulator
+function mkPerm(axis,layer,dir){
+  const a=new THREE.Vector3(...axis),pm=[];
+  SLOTS.forEach((s,i)=>{
+    const p=new THREE.Vector3(...s.p);
+    if((p.dot(a)>=0?1:-1)!==layer){pm.push(i);return}
+    const q=p.applyAxisAngle(a,dir*Math.PI/2),n=new THREE.Vector3(...s.n).applyAxisAngle(a,dir*Math.PI/2);
+    pm.push(SIDX[kf(q.x,q.y,q.z,n.x,n.y,n.z)]);
+  });
+  return pm;
+}
+const ap=(s,pm)=>{const r=new Uint8Array(24);for(let i=0;i<24;i++)r[pm[i]]=s[i];return r};
+const MOVES=[],AXS={R:[1,0,0],U:[0,1,0],F:[0,0,1]};
+// hanya R, U, F (pojok kiri-bawah-belakang tetap diam) -> 9 gerakan; putaran 90 derajat biaya 1, 180 derajat biaya 2
+for(const f of'RUF'){
+  const q=mkPerm(AXS[f],1,-1),qi=mkPerm(AXS[f],1,1);
+  MOVES.push({n:f,pm:q,c:1},{n:f+"'",pm:qi,c:1},{n:f+'2',pm:q.map(i=>q[i]),c:2});
+}
+const T0=SLOTS.map(s=>FN.indexOf(s.k));
+function readState(){
+  const s=new Uint8Array(24);
+  for(const c of cubies)for(const m of c.userData.st){
+    const n=m.userData.n.clone().applyQuaternion(c.quaternion),p=c.position;
+    s[SIDX[kf(p.x,p.y,p.z,n.x,n.y,n.z)]]=CID[m.userData.c];
+  }
+  return s;
+}
+// warna target ditentukan dari pojok yang tidak pernah bergerak (kiri-bawah-belakang)
+function mkTarget(s){
+  const g=n=>s[SIDX[kf(-.5,-.5,-.5,n[0],n[1],n[2])]],f=[0,0,0,0,0,0];
+  f[1]=g([-1,0,0]);f[3]=g([0,-1,0]);f[5]=g([0,0,-1]);
+  f[0]=f[1]^1;f[2]=f[3]^1;f[4]=f[5]^1;
+  return SLOTS.map(sl=>f[FN.indexOf(sl.k)]);
+}
+const key=s=>{let k='';for(let i=0;i<24;i++)k+=s[i];return k};
+const CORN=[];(()=>{const g={};SLOTS.forEach((s,i)=>(g[s.p]=g[s.p]||[]).push(i));for(const k in g)CORN.push(g[k])})();
+// GBFS: jumlah stiker salah (tidak admissible, tapi informatif)
+const hS=(s,T)=>{let c=0;for(let i=0;i<24;i++)if(s[i]!==T[i])c++;return c};
+// A*: ceil(jumlah pojok salah / 4), admissible & konsisten karena 1 gerakan hanya menyentuh 4 pojok
+const hA=(s,T)=>{let c=0;for(const g of CORN)for(const i of g)if(s[i]!==T[i]){c++;break}return Math.ceil(c/4)};
+class Heap{
+  constructor(){this.a=[]}
+  get size(){return this.a.length}
+  push(x){const a=this.a;let i=a.push(x)-1;while(i>0){const p=(i-1)>>1;if(a[p][0]<=x[0])break;a[i]=a[p];i=p}a[i]=x}
+  pop(){const a=this.a,t=a[0],l=a.pop();if(a.length){let i=0;const n=a.length;for(;;){let c=2*i+1;if(c>=n)break;if(c+1<n&&a[c+1][0]<a[c][0])c++;if(a[c][0]>=l[0])break;a[i]=a[c];i=c}a[i]=l}return t}
+}
+function search(algo,s0,T,lim){
+  const t0=performance.now(),gk=key(T),seen=new Map([[key(s0),0]]),heap=new Heap(),fifo=[];
+  let head=0,seq=0,exp=0,gen=1,peak=1,goal=null;
+  const bfs=algo==='bfs',hf=algo==='gbfs'?hS:hA;
+  const pri=n=>algo==='ucs'?n.g:algo==='gbfs'?hf(n.s,T):n.g+hf(n.s,T);
+  const put=n=>bfs?fifo.push(n):heap.push([pri(n),seq++,n]);
+  const len=()=>bfs?fifo.length-head:heap.size;
+  put({s:s0,g:0,p:null,m:null});
+  while(len()>0){
+    const n=bfs?fifo[head++]:heap.pop()[2],k=key(n.s);
+    if(!bfs&&algo!=='gbfs'&&seen.get(k)<n.g)continue;
+    exp++;
+    if(k===gk){goal=n;break}
+    if(exp>=lim)break;
+    for(const m of MOVES){
+      const s=ap(n.s,m.pm),g=n.g+m.c,ky=key(s),old=seen.get(ky);
+      if(old!==undefined&&(bfs||algo==='gbfs'||old<=g))continue;
+      seen.set(ky,g);gen++;put({s,g,p:n,m:m.n});
+    }
+    peak=Math.max(peak,len());
+  }
+  const sol=[];for(let n=goal;n&&n.m;n=n.p)sol.unshift(n.m);
+  return{ok:!!goal,sol,cost:goal?goal.g:0,ms:performance.now()-t0,exp,gen,peak,stored:seen.size,hitLim:!goal&&exp>=lim};
+}
+//--UI--
+const NAMA={bfs:'BFS',ucs:'UCS',gbfs:'GBFS',astar:'A*'},met=document.getElementById('met'),outEl=document.getElementById('out');
+let lastRows=null,lastK='';
+const memTxt=n=>{const kb=n*200/1024;return kb>=1024?(kb/1024).toFixed(1)+' MB':kb.toFixed(0)+' KB'};
+const isBusy=()=>{if(anim||queue.length){met.textContent='Tunggu animasi selesai dulu.';return true}return false};
+function doSolve(){
+  const s=readState(),T=mkTarget(s);lastK=key(s);lastRows=[];
+  for(const a of['bfs','ucs','gbfs','astar']){const r=search(a,s,T,1500000);r.a=a;lastRows.push(r)}
+  let h='<table><tr><th>Algo</th><th>Waktu (ms)</th><th>Node dieksplorasi</th><th>Node tersimpan</th><th>Frontier maks</th><th>Memori (est.)</th><th>Langkah</th><th>Rumus</th></tr>';
+  lastRows.forEach((r,i)=>{
+    h+='<tr><td>'+NAMA[r.a]+'</td><td>'+r.ms.toFixed(1)+'</td><td>'+r.exp+'</td><td>'+r.stored+'</td><td>'+r.peak+'</td><td>'+memTxt(r.stored)+'</td><td>'+(r.ok?r.sol.length+' (biaya '+r.cost+')':'-')+'</td><td class="f">'+
+      (!r.ok?'gagal'+(r.hitLim?' (batas node tercapai)':''):r.sol.length?r.sol.join(' ')+'<button data-i="'+i+'">Jalankan</button>':'(sudah selesai)')+'</td></tr>';
+  });
+  document.getElementById('tbl').innerHTML=h+'</table>';
+  met.textContent='Selesai. Salin rumus ke kolom input atau klik Jalankan.';outEl.textContent='';
+}
+document.getElementById('bSolve').onclick=()=>{if(isBusy())return;met.textContent='Mencari dengan 4 algoritma...';setTimeout(doSolve,30)};
+document.getElementById('tbl').onclick=e=>{
+  const i=e.target.dataset&&e.target.dataset.i;if(i===undefined||isBusy())return;
+  if(key(readState())!==lastK){met.textContent='Kubus sudah berubah, klik Cari Solusi lagi.';return}
+  applyFormula(lastRows[i].sol.join(' '));
+};
+// Eksperimen batch: dataset acakan dangkal/sedang/dalam, murni di memori
+async function runExp(){
+  const b=document.getElementById('bExp');b.disabled=true;
+  const cats=[['Dangkal 3-5',3,5],['Sedang 6-8',6,8],['Dalam 9-12',9,12]],AL=['bfs','ucs','gbfs','astar'],Q=MOVES.filter(m=>m.c===1),N=5;
+  let txt='Eksperimen: '+N+' acakan/kategori, batas 400.000 node, rata-rata dari yang berhasil\n'+['Kategori','Algo','Solved','Waktu(ms)','Node','Langkah','Memori(KB est.)'].map(x=>x.padEnd(14)).join('')+'\n';
+  for(const[cn,lo,hi]of cats){
+    const sc=[];
+    for(let i=0;i<N;i++){
+      let s=T0,L=lo+Math.floor(Math.random()*(hi-lo+1)),last='',m;
+      for(let j=0;j<L;j++){do m=Q[Math.floor(Math.random()*Q.length)];while(m.n[0]===last);last=m.n[0];s=ap(s,m.pm)}
+      sc.push(s);
+    }
+    for(const a of AL){
+      let ok=0,t=0,e=0,l=0,m=0;
+      for(const s of sc){
+        outEl.textContent=txt+'Menjalankan '+cn+' '+NAMA[a]+'...';
+        await new Promise(r=>setTimeout(r,0));
+        const r=search(a,s,T0,400000);
+        if(r.ok){ok++;t+=r.ms;e+=r.exp;l+=r.sol.length;m+=r.stored*200/1024}
+      }
+      const f=v=>ok?(v/ok).toFixed(1):'-';
+      txt+=[cn,NAMA[a],ok+'/'+N,f(t),f(e),f(l),f(m)].map(x=>String(x).padEnd(14)).join('')+'\n';
+    }
+  }
+  outEl.textContent=txt;met.textContent='Eksperimen selesai.';b.disabled=false;
+}
+document.getElementById('bExp').onclick=()=>{if(!isBusy())runExp()};
+
+// Controls Mouse/Touch
+const ray=new THREE.Raycaster(),el=rend.domElement;let st=null;
+function ndc(e){const r=el.getBoundingClientRect();return new THREE.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1)}
+function scr(p){const v=root.localToWorld(p.clone()).project(cam),r=el.getBoundingClientRect();return new THREE.Vector2((v.x+1)/2*r.width,(1-v.y)/2*r.height)}
+
+el.addEventListener('pointerdown',e=>{
+  el.setPointerCapture(e.pointerId);
+  st={x:e.clientX,y:e.clientY,lx:e.clientX,ly:e.clientY,mode:'view',done:false};
+  if(anim||queue.length)return;
+  ray.setFromCamera(ndc(e),cam);
+  const h=ray.intersectObjects(bodies)[0];
+  if(h){
+    const c=h.object.parent;
+    const n=h.face.normal.clone().applyQuaternion(c.quaternion);
+    st.mode='cube';st.p=root.worldToLocal(h.point.clone());st.n=n;
+  }
+});
+
+el.addEventListener('pointermove',e=>{
+  if(!st)return;
+  if(st.mode==='view'){
+    const dx=e.clientX-st.lx,dy=e.clientY-st.ly;st.lx=e.clientX;st.ly=e.clientY;
+    const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(dy*0.01,dx*0.01,0));
+    root.quaternion.premultiply(q);
+  }else if(!st.done){
+    const d=new THREE.Vector2(e.clientX-st.x,e.clientY-st.y);
+    if(d.length()<12)return;
+    const na=['x','y','z'].reduce((a,k)=>Math.abs(st.n[k])>Math.abs(st.n[a])?k:a,'x');
+    let best=null;
+    for(const k of['x','y','z']){
+      if(k===na)continue;
+      const ax=new THREE.Vector3();ax[k]=1;
+      const t=ax.clone().cross(st.p).normalize().multiplyScalar(0.3);
+      const v=scr(st.p.clone().add(t)).sub(scr(st.p));
+      const sc=d.dot(v)/(v.length()||1);
+      if(!best||Math.abs(sc)>Math.abs(best.sc))best={ax,sc,k};
+    }
+    st.done=true;
+    turn(best.ax,st.p[best.k]>=0?1:-1,best.sc>=0?1:-1);
+  }
+});
+
+const end=()=>{st=null};
+el.addEventListener('pointerup',end);el.addEventListener('pointercancel',end);
+
+function resize(){const w=stage.clientWidth,h=stage.clientHeight;rend.setSize(w,h);cam.aspect=w/h;cam.position.z=w/h<.8?10:7.5;cam.updateProjectionMatrix()}
+window.addEventListener('resize',resize);
+build();resize();new ResizeObserver(resize).observe(stage);requestAnimationFrame(step);
+</script>
+</body>
+</html>
