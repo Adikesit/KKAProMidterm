@@ -175,7 +175,7 @@ const FN=['px','nx','py','ny','pz','nz'],CID={};
 Object.keys(COL).forEach((k,i)=>CID[COL[k]]=i);
 const kf=(x,y,z,a,b,c)=>Math.round(x*2)/2+','+Math.round(y*2)/2+','+Math.round(z*2)/2+'|'+Math.round(a)+','+Math.round(b)+','+Math.round(c);
 const SLOTS=[],SIDX={};
-for(const x of[-.5,.5])for(const y of[-.5,.5])for(const z of[-.5,.5])for(const[k,n]of FACES){
+for(const[k,n]of FACES)for(const x of[-.5,.5])for(const y of[-.5,.5])for(const z of[-.5,.5]){
   if(n[0]*x+n[1]*y+n[2]*z>0){SIDX[kf(x,y,z,n[0],n[1],n[2])]=SLOTS.length;SLOTS.push({p:[x,y,z],n,k})}
 }
 // permutasi tiap gerakan diturunkan dari geometri yang sama dengan simulator
@@ -218,11 +218,12 @@ const CORN=[];(()=>{const g={};SLOTS.forEach((s,i)=>(g[s.p]=g[s.p]||[]).push(i))
 const hS=(s,T)=>{let c=0;for(let i=0;i<24;i++)if(s[i]!==T[i])c++;return c};
 // A*: ceil(jumlah pojok salah / 4), admissible & konsisten karena 1 gerakan hanya menyentuh 4 pojok
 const hA=(s,T)=>{let c=0;for(const g of CORN)for(const i of g)if(s[i]!==T[i]){c++;break}return Math.ceil(c/4)};
+const lt=(a,b)=>a[0]<b[0]||(a[0]===b[0]&&a[1]<b[1]);
 class Heap{
   constructor(){this.a=[]}
   get size(){return this.a.length}
-  push(x){const a=this.a;let i=a.push(x)-1;while(i>0){const p=(i-1)>>1;if(a[p][0]<=x[0])break;a[i]=a[p];i=p}a[i]=x}
-  pop(){const a=this.a,t=a[0],l=a.pop();if(a.length){let i=0;const n=a.length;for(;;){let c=2*i+1;if(c>=n)break;if(c+1<n&&a[c+1][0]<a[c][0])c++;if(a[c][0]>=l[0])break;a[i]=a[c];i=c}a[i]=l}return t}
+  push(x){const a=this.a;let i=a.push(x)-1;while(i>0){const p=(i-1)>>1;if(!lt(x,a[p]))break;a[i]=a[p];i=p}a[i]=x}
+  pop(){const a=this.a,t=a[0],l=a.pop();if(a.length){let i=0;const n=a.length;for(;;){let c=2*i+1;if(c>=n)break;if(c+1<n&&lt(a[c+1],a[c]))c++;if(!lt(a[c],l))break;a[i]=a[c];i=c}a[i]=l}return t}
 }
 function search(algo,s0,T,lim){
   const t0=performance.now(),gk=key(T),seen=new Map([[key(s0),0]]),heap=new Heap(),fifo=[];

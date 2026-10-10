@@ -1,0 +1,9 @@
+kategori,algoritma,jumlah_query,rata2_waktu_ms,rata2_node_dieksplorasi,rata2_node_dibangkitkan,rata2_frontier_maks,rata2_node_tersimpan,rata2_memori_puncak_kb,rata2_langkah,rata2_biaya,persen_optimal_langkah,persen_optimal_biaya
+dangkal,BFS,18,2.9,920.4,3218.2,2298.7,3218.2,481.2,4.0,5.3,100,100
+dangkal,A*,18,2.1,342.0,1254.2,913.2,1254.2,160.1,4.0,5.3,100,100
+dangkal,GBFS,18,13.6,1977.0,8067.0,6091.0,8067.0,1409.0,8.9,11.4,33,33
+dangkal,UCS,18,7.0,1346.9,4580.9,3234.9,4580.9,771.8,4.0,5.3,100,100
+sedang,BFS,12,12.2,3458.2,10262.2,6805.0,10262.2,1734.3,6.5,8.8,100,100
+sedang,A*,12,8.2,1537.5,4826.2,3289.7,4826.1,750.0,6.5,8.8,100,100
+sedang,GBFS,12,18.1,2190.5,8890.1,6700.6,8890.1,1626.9,15.9,19.9,8,8
+sedang,UCS,12,27.7,4973.3,14496.0,9523.7,14496.0,2824.5,6.5,8.8,100,100

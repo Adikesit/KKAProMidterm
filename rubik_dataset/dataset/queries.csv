@@ -1,0 +1,31 @@
+query_id,kategori,start_id,depth_opt_moves,scramble
+1,dangkal,121,3,R' F U
+2,dangkal,76,3,R U2 R
+3,dangkal,204,3,U F2 R2
+4,dangkal,189,3,U R2 F2
+5,dangkal,178,3,U R' U
+6,dangkal,135,3,R' F2 U2
+7,dangkal,1893,4,F' R' U2 F2
+8,dangkal,594,4,R F2 U2 R'
+9,dangkal,1770,4,F U' R U
+10,dangkal,1901,4,F' R' F' R'
+11,dangkal,2212,4,F2 U2 R' U
+12,dangkal,1501,4,U2 R' F' U2
+13,dangkal,3656,5,R' U' R U R
+14,dangkal,11906,5,F2 U' R U' R2
+15,dangkal,9144,5,F R F U2 R2
+16,dangkal,2752,5,R U2 F R F'
+17,dangkal,2720,5,R U2 R' F2 R2
+18,dangkal,3767,5,R' U' F R' F
+19,sedang,26552,6,R2 U2 R F2 R F'
+20,sedang,27471,6,R2 F R' U2 F2 R2
+21,sedang,45342,6,U2 F' R2 U' R F'
+22,sedang,51677,6,F U2 R2 F R U'
+23,sedang,13963,6,R U' F R2 F2 U2
+24,sedang,49005,6,F R2 F R U2 F
+25,sedang,114484,7,R' F' U R2 F U F2
+26,sedang,250060,7,F' R F' U2 F' U' R
+27,sedang,232723,7,F R2 F' R' F2 U2 R
+28,sedang,246208,7,F' R U R F2 U' R
+29,sedang,205213,7,U2 R' F U2 R2 F R
+30,sedang,172334,7,U F2 U' F' U2 F2 R'
